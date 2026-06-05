@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アンカーパチンコ・シミュレータ</title>
+    <meta name="description" content="昔のCプログラミング雑誌のパチンコ問題「アンカーパチンコ」を視覚的にシミュレートして検証するアプリケーション。">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1 id="app-title">⚓ アンカーパチンコ・シミュレータ ⚓</h1>
+            <p class="subtitle">昔のCプログラミング雑誌の応募問題を視覚的に検証する</p>
+        </header>
+
+        <main class="main-content">
+            <!-- パチンコ台描画領域 -->
+            <section class="board-card card" id="board-section">
+                <div class="card-header">
+                    <span class="pulse-dot"></span>
+                    <h2 id="board-title">Fig. 1 アンカーパチンコの例</h2>
+                </div>
+                <div class="canvas-container">
+                    <svg id="pachinko-svg" viewBox="0 0 600 700" width="100%" height="100%">
+                        <!-- 壁、ピン、いかり、ボールはJSで動的に生成・制御されます -->
+                        <defs>
+                            <!-- グラデーション定義 -->
+                            <linearGradient id="ball-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ff7eb3" />
+                                <stop offset="100%" stop-color="#ff758c" />
+                            </linearGradient>
+                            <linearGradient id="anchor-grad-r" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#00f2fe" />
+                                <stop offset="100%" stop-color="#4facfe" />
+                            </linearGradient>
+                            <linearGradient id="anchor-grad-l" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#b180ff" />
+                                <stop offset="100%" stop-color="#8033ff" />
+                            </linearGradient>
+                            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="6" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+                        <!-- パチンコ台の外枠・壁 -->
+                        <g id="board-walls"></g>
+                        <!-- 接続ルート（デバッグ用・ガイドライン用） -->
+                        <g id="board-tracks" opacity="0.15"></g>
+                        <!-- いかり（アンカー）グループ -->
+                        <g id="board-anchors"></g>
+                        <!-- ボール -->
+                        <circle id="ball" r="12" fill="url(#ball-grad)" filter="url(#glow)" style="display: none;"></circle>
+                    </svg>
+                </div>
+            </section>
+
+            <!-- コントロールパネル -->
+            <section class="control-card card">
+                <!-- 台の切り替えタブ -->
+                <div class="tabs">
+                    <button class="tab-btn active" id="tab-fig1" onclick="switchBoard('fig1')">Fig. 1 (8いかり)</button>
+                    <button class="tab-btn" id="tab-fig3" onclick="switchBoard('fig3')">Fig. 3 (18いかり)</button>
+                </div>
+
+                <!-- 投入ボタンエリア -->
+                <div class="control-group">
+                    <h3>ボールを落とす場所を選択</h3>
+                    <div class="drop-buttons" id="drop-buttons-container">
+                        <!-- JSで動的にボタンを生成します (A, B, C / A, B, C, D) -->
+                    </div>
+                </div>
+
+                <!-- 投入カウンター -->
+                <div class="control-group">
+                    <h3>投入カウンター</h3>
+                    <div class="counters-grid" id="counters-container">
+                        <!-- JSでカウンターを生成します -->
+                    </div>
+                    <div class="total-counter">
+                        <span>合計投入数:</span>
+                        <span id="total-count-val" class="number-display">0</span>
+                        <span>個</span>
+                    </div>
+                </div>
+
+                <!-- ショートカット（検証用解答自動セット） -->
+                <div class="control-group">
+                    <h3>解答検証ショートカット</h3>
+                    <div class="shortcut-buttons">
+                        <button class="btn btn-secondary" id="btn-shortcut-fig1" onclick="applyAnswerFig1()">Fig. 1 解答をセット (A:1, B:5, C:1)</button>
+                        <button class="btn btn-secondary" id="btn-shortcut-fig3" onclick="applyAnswerFig3()">Fig. 3 解答をセット (A:13, B:9, C:5, D:1)</button>
+                        <button class="btn btn-primary" id="btn-auto-run" onclick="runQueuedBalls()" disabled>セットした玉を順次落とす</button>
+                    </div>
+                    <p class="help-text">解答をセットすると、自動投入用キューに玉が登録されます。ボタンを押すと1個ずつ順に落としていかりの向きを検証できます。</p>
+                </div>
+
+                <!-- 落下速度調整 -->
+                <div class="control-group">
+                    <h3>落下速度調整</h3>
+                    <div class="speed-control-container">
+                        <input type="range" id="speed-slider" min="2" max="30" value="10" oninput="updateSpeedLabel(this.value)">
+                        <span id="speed-val" class="number-display">10</span>
+                        <span class="speed-unit">px/f</span>
+                    </div>
+                </div>
+
+                <!-- システム操作 -->
+                <div class="control-group action-buttons">
+                    <button class="btn btn-danger" id="btn-reset" onclick="resetBoard()">🔁 リセット</button>
+                </div>
+
+                <!-- リアルタイムログ -->
+                <div class="control-group log-group">
+                    <h3>落下トレースログ</h3>
+                    <div class="log-console" id="log-console">
+                        <div class="log-entry system">システム準備完了。台を選択してボールを落としてください。</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 アンカーパチンコ・シミュレータ - Advanced Coding Assistant</p>
+        </footer>
+    </div>
+
+    <!-- Script -->
+    <script src="app.js"></script>
+</body>
+</html>
